@@ -21,7 +21,7 @@ The platform currently provides:
 
 - **Live Frontend Dashboard:** http://localhost:3000/
 - **Live Backend API:** http://127.0.0.1:8000/docs
-- **Pitch Video:** [Insert pitch video URL]
+- **Pitch Video:** https://youtu.be/FqAw9NXDqm0
 - **GitHub Repository:** [Insert repository URL]
 
 ## Technologies Used
