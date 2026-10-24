@@ -19,7 +19,8 @@ The platform currently provides:
 
 ## Important Links
 
-- **Live Demo:** [Insert demo URL, or write Not deployed]
+- **Live Frontend Dashboard:** (http://localhost:3000/
+- **Live Backend API:**http://127.0.0.1:8000/docs
 - **Pitch Video:** [Insert pitch video URL]
 - **GitHub Repository:** [Insert repository URL]
 
