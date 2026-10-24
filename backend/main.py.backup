@@ -1,0 +1,315 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+import os
+import json
+
+from dotenv import load_dotenv
+from openai import OpenAI
+from fastapi import HTTPException
+
+load_dotenv(dotenv_path=".env")
+app = FastAPI(title="TrendPilot AI API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+class SkillRequest(BaseModel):
+    skill: str
+
+
+# Sample role data for demonstration only.
+# This data does not represent real-time labor market statistics.
+ROLES = [
+    {
+        "title": "Data Analyst",
+        "skills": ["python", "sql", "excel", "data analysis"],
+        "description": "Analyze data and support business decisions.",
+        "learning": [
+            "SQL",
+            "Data Visualization",
+            "Statistics",
+        ],
+        "sdg": [
+            "SDG 4: Quality Education",
+            "SDG 8: Decent Work and Economic Growth",
+        ],
+    },
+    {
+        "title": "AI / Machine Learning Engineer",
+        "skills": [
+            "python",
+            "machine learning",
+            "statistics",
+        ],
+        "description": "Build and evaluate machine learning models.",
+        "learning": [
+            "Statistics",
+            "Machine Learning",
+            "Model Evaluation",
+        ],
+        "sdg": [
+            "SDG 4: Quality Education",
+            "SDG 9: Industry, Innovation and Infrastructure",
+        ],
+    },
+    {
+        "title": "Full-Stack Developer",
+        "skills": [
+            "javascript",
+            "typescript",
+            "html",
+            "css",
+            "react",
+            "python",
+        ],
+        "description": "Build complete web applications with frontend and backend systems.",
+        "learning": [
+            "React",
+            "REST APIs",
+            "Databases",
+        ],
+        "sdg": [
+            "SDG 4: Quality Education",
+            "SDG 8: Decent Work and Economic Growth",
+        ],
+    },
+    {
+        "title": "Cybersecurity Analyst",
+        "skills": [
+            "networking",
+            "linux",
+            "python",
+            "security",
+        ],
+        "description": "Identify security risks and protect systems and data.",
+        "learning": [
+            "Networking",
+            "Security Fundamentals",
+            "Threat Analysis",
+        ],
+        "sdg": [
+            "SDG 9: Industry, Innovation and Infrastructure",
+        ],
+    },
+]
+
+
+@app.get("/")
+def home():
+    return {"message": "Welcome to TrendPilot AI"}
+
+
+@app.get("/market-trends")
+def get_market_trends():
+    return {
+        "country": "Malaysia",
+        "source": "Department of Statistics Malaysia (DOSM)",
+        "report": "Employment Statistics, First Quarter 2026",
+        "release_date": "2026-05-14",
+        "data_period": "2026-Q1",
+        "indicators": [
+            {
+                "name": "Total job vacancies",
+                "value": 194800,
+                "unit": "positions",
+                "year_over_year_change_percent": 0.4
+            },
+            {
+                "name": "Skilled-category job vacancies",
+                "value": 48700,
+                "unit": "positions",
+                "year_over_year_change_percent": None
+            },
+            {
+                "name": "Total jobs in skilled category",
+                "value": 2330000,
+                "unit": "positions",
+                "year_over_year_change_percent": 2.6
+            }
+        ],
+        "source_url": (
+            "https://www.dosm.gov.my/portal-main/"
+            "release-content/employment-statistics-q12026"
+        ),
+        "limitations": (
+            "These are national labor market statistics, "
+            "not technology-specific vacancy counts. "
+            "The figures are a published snapshot, not live data."
+        )
+    }
+
+
+@app.post("/analyze")
+def analyze_skill(request: SkillRequest):
+    raw_input = request.skill.strip()
+
+    if not raw_input:
+        raise HTTPException(
+            status_code=400,
+            detail="Please enter a skill or career interest."
+        )
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    model = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
+
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="OpenAI API key is not configured."
+        )
+
+    # Accept comma-, semicolon-, or newline-separated input.
+    input_skills = sorted({
+        item.strip()
+        for item in raw_input.replace(";", ",")
+        .replace("\n", ",").split(",")
+        if item.strip()
+    })
+
+    prompt = f"""
+Analyze the user's skills and career interests.
+
+User input:
+{raw_input}
+
+Generate 4 to 6 relevant career roles based on the actual input.
+Do not restrict your suggestions to a predefined list of roles.
+
+Examples of the expected reasoning:
+- C++ may relate to C++ development or embedded systems.
+- Blockchain may relate to blockchain development or smart contracts.
+- Robotics may relate to robotics software or automation.
+
+These are examples, not a fixed list. Adapt to the user's actual input.
+
+Return a JSON object with exactly these top-level fields:
+- roles: an array of relevant career roles
+- data_note: a short explanation of score limitations
+- next_step: a practical recommendation
+
+Each role must contain:
+- title: string
+- match_score: integer from 0 to 100
+- matched_skills: array of strings
+- missing_skills: array of strings
+- description: string
+- learning_pathway: array of strings
+- sdg_alignment: array of strings
+- reason: string
+
+Rules:
+1. Infer relevant career directions instead of requiring exact keyword matches.
+2. Treat match_score as an estimated fit based on the information provided,
+   NOT an employment probability or verified market statistic.
+3. Do not claim the user possesses skills they have not provided.
+4. If the user provides only one skill, use reasonable career-related
+   inferences but clearly state that the assessment is based on limited input.
+5. Do not invent live job vacancies, salary figures, or market statistics.
+6. Use concise, practical learning pathways.
+7. If the input is meaningless or unrelated to careers, do not fabricate
+   a confident assessment. Explain the limitation in the response.
+8. Return valid JSON only.
+"""
+
+try:
+    load_dotenv(dotenv_path=".env", override=True)
+
+    client = OpenAI(
+        api_key=os.getenv("GROQ_API_KEY"),
+        base_url="https://api.groq.com/openai/v1"
+    )
+    model = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
+    completion = client.chat.completions.create(
+        model=model,
+        messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are TrendPilot AI, a careful career analysis "
+                        "assistant. Follow the requested JSON format."
+                    )
+                },
+                {"role": "user", "content": prompt}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+        )
+
+        content = completion.choices[0].message.content
+
+        if not content:
+            raise ValueError("The AI returned an empty response.")
+
+        result = json.loads(content)
+        roles = result.get("roles")
+
+        if not isinstance(roles, list) or not roles:
+            raise ValueError("The AI returned no valid career roles.")
+
+        # Normalize fields so the existing frontend can keep using them.
+        normalized_roles = []
+
+        for role in roles:
+            if not isinstance(role, dict) or not role.get("title"):
+                continue
+
+            try:
+                score = int(role.get("match_score", 0))
+            except (TypeError, ValueError):
+                score = 0
+
+            normalized_roles.append({
+                "title": str(role["title"]),
+                "match_score": max(0, min(100, score)),
+                "matched_skills": role.get("matched_skills", []),
+                "missing_skills": role.get("missing_skills", []),
+                "description": role.get("description", ""),
+                "learning_pathway": role.get("learning_pathway", []),
+                "sdg_alignment": role.get("sdg_alignment", []),
+                "reason": role.get("reason", ""),
+            })
+
+        if not normalized_roles:
+            raise ValueError("No usable career roles were returned.")
+
+        normalized_roles.sort(
+            key=lambda item: item["match_score"],
+            reverse=True
+        )
+
+        return {
+            "input_skills": input_skills,
+            "roles": normalized_roles,
+            "data_note": result.get(
+                "data_note",
+                "Scores are AI-generated estimates, not employment probabilities."
+            ),
+            "next_step": result.get(
+                "next_step",
+                "Add more skills for a more personalized assessment."
+            )
+        }
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # Log the actual error on the backend, not the secret API key.
+        print(f"Career analysis failed: {type(exc).__name__}: {exc}")
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "AI analysis failed. Check the backend terminal, "
+                "API billing, model access, and API configuration."
+            )
+        )

@@ -1,6 +1,6 @@
 "use client";
 
-import MatchScoreChart from "./components/MatchScoreChart";
+import MatchScoreChart from "../components/MatchScoreChart";
 
 import { useEffect, useState } from "react";
 
